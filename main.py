@@ -1,14 +1,13 @@
 import os
-import base64
 import re
 from datetime import datetime
 from typing import Optional
 
-import requests
 import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, HttpUrl
 from dotenv import load_dotenv
+from notion_client import Client
 
 # 環境変数の読み込み
 load_dotenv()
@@ -16,21 +15,23 @@ load_dotenv()
 # FastAPIアプリの初期化
 app = FastAPI(
     title="Shortcut Article Clipper API",
-    description="Safari記事をiPhoneショートカットから保存し、AIで分析してGitHubに保存するシステム",
+    description="Safari記事をiPhoneショートカットから保存し、AIで分析してNotionに保存するシステム",
     version="0.1.0"
 )
 
 # 環境変数の取得
 SECRET_TOKEN = os.environ.get("SECRET_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-GITHUB_OWNER = os.environ.get("GITHUB_OWNER")
-GITHUB_REPO = os.environ.get("GITHUB_REPO")
-GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
+NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID")
 
 # Gemini APIの初期化
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
+
+# Notion クライアントの初期化
+if NOTION_API_KEY:
+    notion = Client(auth=NOTION_API_KEY)
 
 
 # リクエストモデル
@@ -44,7 +45,7 @@ class SaveArticleResponse(BaseModel):
     success: bool
     message: str
     title: Optional[str] = None
-    github_url: Optional[str] = None
+    notion_url: Optional[str] = None
 
 
 # ヘルスチェック用のルートエンドポイント
@@ -65,26 +66,6 @@ async def health():
     }
 
 
-def sanitize_title(title: str) -> str:
-    """
-    タイトルをファイル名として使用できる形式にサニタイズする
-    """
-    # 最初のMarkdown見出し記号を削除
-    title = re.sub(r'^#+\s*', '', title)
-
-    # 使用できない文字を削除または置換
-    title = re.sub(r'[<>:"/\\|?*]', '', title)
-    title = re.sub(r'\s+', '-', title)
-
-    # 長さを制限（最大50文字）
-    title = title[:50]
-
-    # 末尾のハイフンを削除
-    title = title.rstrip('-')
-
-    return title.lower()
-
-
 def extract_title_from_markdown(markdown: str) -> str:
     """
     Markdownから最初の見出しをタイトルとして抽出する
@@ -97,6 +78,33 @@ def extract_title_from_markdown(markdown: str) -> str:
 
     # タイトルが見つからない場合はデフォルト
     return "記事"
+
+
+def extract_tags_from_markdown(markdown: str) -> list[str]:
+    """
+    Markdownからタグを抽出する（## タグ セクションから）
+    """
+    lines = markdown.split('\n')
+    in_tags_section = False
+
+    for line in lines:
+        # タグセクションを探す
+        if line.strip().startswith('## タグ'):
+            in_tags_section = True
+            continue
+
+        # タグセクション内でタグを抽出
+        if in_tags_section:
+            # 次のセクションに到達したら終了
+            if line.strip().startswith('#'):
+                break
+
+            # #で始まるタグを抽出
+            tags = re.findall(r'#(\w+)', line)
+            if tags:
+                return tags
+
+    return []
 
 
 def generate_article_markdown(url: str) -> str:
@@ -183,53 +191,75 @@ URL: {url}
         )
 
 
-def push_to_github(markdown: str, filename: str) -> str:
+def save_to_notion(markdown: str, url: str) -> str:
     """
-    生成されたMarkdownをGitHubリポジトリにpushする
+    生成されたMarkdownをNotionデータベースに保存する
     """
-    if not all([GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO]):
+    if not all([NOTION_API_KEY, NOTION_DATABASE_ID]):
         raise HTTPException(
             status_code=500,
-            detail="GitHub設定が不足しています（TOKEN/OWNER/REPO）"
+            detail="Notion設定が不足しています（API_KEY/DATABASE_ID）"
         )
-
-    # GitHubのAPIエンドポイント
-    url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/articles/{filename}"
-
-    # ヘッダー
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-
-    # ファイル内容をBase64エンコード
-    content_base64 = base64.b64encode(markdown.encode('utf-8')).decode('utf-8')
 
     # タイトルを抽出
     title = extract_title_from_markdown(markdown)
 
-    # リクエストボディ
-    data = {
-        "message": f"Add article: {title}",
-        "content": content_base64,
-        "branch": GITHUB_BRANCH
-    }
+    # タグを抽出
+    tags = extract_tags_from_markdown(markdown)
 
     try:
-        # GitHub APIにPUTリクエスト
-        response = requests.put(url, headers=headers, json=data)
-        response.raise_for_status()
+        # Notionページを作成
+        new_page = notion.pages.create(
+            parent={"database_id": NOTION_DATABASE_ID},
+            properties={
+                "タイトル": {
+                    "title": [
+                        {
+                            "text": {
+                                "content": title
+                            }
+                        }
+                    ]
+                },
+                "URL": {
+                    "url": url
+                },
+                "保存日": {
+                    "date": {
+                        "start": datetime.now().strftime('%Y-%m-%d')
+                    }
+                },
+                "タグ": {
+                    "multi_select": [{"name": tag} for tag in tags]
+                }
+            },
+            children=[
+                {
+                    "object": "block",
+                    "type": "code",
+                    "code": {
+                        "language": "markdown",
+                        "rich_text": [
+                            {
+                                "type": "text",
+                                "text": {
+                                    "content": markdown[:2000]  # Notionの制限により最初の2000文字
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        )
 
-        # GitHubのファイルURLを返す
-        result = response.json()
-        github_url = result.get('content', {}).get('html_url', '')
+        # NotionページのURLを返す
+        notion_url = new_page.get('url', '')
+        return notion_url
 
-        return github_url
-
-    except requests.exceptions.HTTPError as e:
+    except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"GitHub push failed: {str(e)}"
+            detail=f"Notion save failed: {str(e)}"
         )
 
 
@@ -238,7 +268,7 @@ def push_to_github(markdown: str, filename: str) -> str:
 async def save_article(request: SaveArticleRequest):
     """
     iPhoneショートカットから記事URLを受け取り、
-    Gemini APIで分析してGitHubに保存する
+    Gemini APIで分析してNotionに保存する
     """
     # 認証トークンの確認
     if request.token != SECRET_TOKEN:
@@ -248,21 +278,18 @@ async def save_article(request: SaveArticleRequest):
         # 1. Gemini APIで記事を取得・分析
         markdown = generate_article_markdown(str(request.url))
 
-        # 2. タイトルを抽出してファイル名を生成
+        # 2. タイトルを抽出
         title = extract_title_from_markdown(markdown)
-        sanitized_title = sanitize_title(title)
-        today = datetime.now().strftime('%Y-%m-%d')
-        filename = f"{today}-{sanitized_title}.md"
 
-        # 3. GitHubにpush
-        github_url = push_to_github(markdown, filename)
+        # 3. Notionに保存
+        notion_url = save_to_notion(markdown, str(request.url))
 
         # 4. 成功レスポンスを返す
         return SaveArticleResponse(
             success=True,
             message="記事を保存しました！",
             title=title,
-            github_url=github_url
+            notion_url=notion_url
         )
 
     except HTTPException:

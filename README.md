@@ -1,10 +1,10 @@
 # Shortcut Article Clipper
 
-Safari記事をiPhoneショートカットから保存し、AIで分析してGitHubに保存するシステム
+Safari記事をiPhoneショートカットから保存し、AIで分析してNotionに保存するシステム
 
 ## 概要
 
-Safariで閲覧中の記事URLをiPhoneショートカットから送信すると、AIが自動的に記事を取得・分析してMarkdownファイルを生成し、プライベートGitHubリポジトリに保存します。
+Safariで閲覧中の記事URLをiPhoneショートカットから送信すると、AIが自動的に記事を取得・分析してMarkdownファイルを生成し、Notionデータベースに保存します。
 
 ## 技術スタック
 
@@ -12,25 +12,59 @@ Safariで閲覧中の記事URLをiPhoneショートカットから送信する�
 - **AI分析**: Gemini API (gemini-1.5-flash)
 - **デプロイ先**: Render.com
 - **トリガー**: iPhoneショートカット
-- **ストレージ**: GitHub (プライベートリポジトリ)
+- **ストレージ**: Notion Database
 
 ## 主な機能
 
 - 記事URLから自動的にコンテンツを取得・分析
 - AIによる記事要約とMarkdown生成
-- GitHubへの自動保存
+- Notionデータベースへの自動保存
 - iPhoneショートカットとの連携
+- タグの自動抽出と設定
 
 ## セットアップ
 
-### 1. 依存関係のインストール
+### 1. Notionデータベースの準備
+
+Notionで以下のプロパティを持つデータベースを作成してください：
+
+| プロパティ名 | タイプ | 説明 |
+|------------|--------|------|
+| タイトル | タイトル | 記事のタイトル |
+| URL | URL | 記事のURL |
+| 保存日 | 日付 | 記事を保存した日 |
+| タグ | マルチセレクト | 記事のタグ |
+
+### 2. Notion Integration の作成
+
+1. [Notion Integrations](https://www.notion.so/my-integrations) にアクセス
+2. 「New integration」をクリック
+3. Integration名を入力（例: Article Clipper）
+4. 「Submit」をクリック
+5. 「Internal Integration Token」をコピー（これが`NOTION_API_KEY`）
+
+### 3. データベースとIntegrationの接続
+
+1. 作成したNotionデータベースを開く
+2. 右上の「...」メニューから「Connect to」を選択
+3. 作成したIntegrationを選択
+
+### 4. Database IDの取得
+
+NotionデータベースのURLから取得します：
+```
+https://www.notion.so/workspace/DATABASE_ID?v=...
+```
+`DATABASE_ID`の部分（32文字のハイフン区切り文字列）をコピー
+
+### 5. 依存関係のインストール
 
 ```bash
 # uvを使用した依存関係のインストール
 uv sync
 ```
 
-### 2. 環境変数の設定
+### 6. 環境変数の設定
 
 `.env.example`を`.env`にコピーして、必要な環境変数を設定してください。
 
@@ -42,12 +76,10 @@ cp .env.example .env
 
 - `SECRET_TOKEN`: iPhoneショートカット認証用トークン（任意の文字列）
 - `GEMINI_API_KEY`: Gemini API Key ([取得方法](https://makersuite.google.com/app/apikey))
-- `GITHUB_TOKEN`: GitHub Personal Access Token ([取得方法](https://github.com/settings/tokens))
-- `GITHUB_OWNER`: GitHubユーザー名
-- `GITHUB_REPO`: プライベートリポジトリ名
-- `GITHUB_BRANCH`: ブランチ名（デフォルト: main）
+- `NOTION_API_KEY`: Notion Integration Token
+- `NOTION_DATABASE_ID`: NotionデータベースID
 
-### 3. アプリケーションの起動
+### 7. アプリケーションの起動
 
 ```bash
 # 開発サーバーの起動
@@ -101,7 +133,7 @@ uv run uvicorn main:app --reload
   "success": true,
   "message": "記事を保存しました！",
   "title": "記事のタイトル",
-  "github_url": "https://github.com/username/repo/blob/main/articles/2025-11-03-article-title.md"
+  "notion_url": "https://www.notion.so/..."
 }
 ```
 
@@ -175,7 +207,17 @@ curl -X POST http://localhost:8000/save-article \
   }'
 ```
 
-## 生成されるMarkdownファイルの構造
+## Notionに保存される内容
+
+記事は以下の形式でNotionデータベースに保存されます：
+
+- **タイトル**: AIが抽出した記事タイトル
+- **URL**: 元の記事URL
+- **保存日**: 保存した日付
+- **タグ**: AIが自動抽出したタグ
+- **本文**: Markdownコードブロックとして保存（最初の2000文字）
+
+### Markdownの構造
 
 ```markdown
 # [記事のタイトル]
@@ -213,21 +255,28 @@ curl -X POST http://localhost:8000/save-article \
 - **原因**: Grounding機能が記事を読み取れない
 - **対策**: エラーメッセージを確認し、URLを確認
 
-### 問題3: GitHub pushが失敗
-- **原因**: トークン権限不足、ファイル名重複
-- **対策**: repoスコープ確認、ファイル名にタイムスタンプが含まれているか確認
+### 問題3: Notion APIエラー
+- **原因**: Integration権限不足、データベースプロパティの不一致
+- **対策**:
+  - IntegrationがデータベースにConnectされているか確認
+  - データベースのプロパティ名が正しいか確認（「タイトル」「URL」「保存日」「タグ」）
 
 ### 問題4: Renderがスリープ
 - **原因**: 15分無アクセス
 - **対策**: cron-job.orgで定期ping、または有料プラン
 
+### 問題5: Gemini APIのレート制限
+- **原因**: 1日1500リクエストを超えた
+- **対策**: 翌日まで待つ、または有料プランを検討
+
 ## 注意事項
 
 1. Gemini APIは無料だがレート制限あり（1500 requests/日）
 2. Renderの無料版は月750時間まで（1プロジェクトなら十分）
-3. プライベートリポジトリのGitHub Tokenは厳重に管理
+3. Notion API Keyは厳重に管理
 4. Gemini APIのGrounding機能は100%確実ではない
-5. 個人利用の範囲で使用すること
+5. Notionの制限により、記事本文は最初の2000文字のみ保存
+6. 個人利用の範囲で使用すること
 
 ## ライセンス
 
@@ -237,6 +286,6 @@ MIT License
 
 - [Gemini API](https://ai.google.dev/)
 - [Google AI Studio](https://makersuite.google.com/)
+- [Notion API](https://developers.notion.com/)
 - [Render.com](https://render.com)
 - [FastAPI](https://fastapi.tiangolo.com)
-- [GitHub API](https://docs.github.com/en/rest)
