@@ -190,6 +190,79 @@ URL: {url}
         )
 
 
+def markdown_to_notion_blocks(markdown: str) -> list:
+    """
+    MarkdownをNotionブロックに変換する
+    """
+    blocks = []
+    lines = markdown.split('\n')
+
+    for line in lines:
+        line = line.strip()
+
+        if not line:
+            continue
+
+        # 見出し1
+        if line.startswith('# '):
+            blocks.append({
+                "object": "block",
+                "type": "heading_1",
+                "heading_1": {
+                    "rich_text": [{"type": "text", "text": {"content": line[2:]}}]
+                }
+            })
+        # 見出し2
+        elif line.startswith('## '):
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"type": "text", "text": {"content": line[3:]}}]
+                }
+            })
+        # 見出し3
+        elif line.startswith('### '):
+            blocks.append({
+                "object": "block",
+                "type": "heading_3",
+                "heading_3": {
+                    "rich_text": [{"type": "text", "text": {"content": line[4:]}}]
+                }
+            })
+        # 箇条書き
+        elif line.startswith('- '):
+            blocks.append({
+                "object": "block",
+                "type": "bulleted_list_item",
+                "bulleted_list_item": {
+                    "rich_text": [{"type": "text", "text": {"content": line[2:]}}]
+                }
+            })
+        # 区切り線
+        elif line.startswith('---'):
+            blocks.append({
+                "object": "block",
+                "type": "divider",
+                "divider": {}
+            })
+        # 通常のテキスト
+        else:
+            # 長すぎるテキストは分割
+            if len(line) > 2000:
+                line = line[:2000]
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": line}}]
+                }
+            })
+
+    # Notionの制限により最大100ブロック
+    return blocks[:100]
+
+
 def save_to_notion(markdown: str, url: str) -> str:
     """
     生成されたMarkdownをNotionデータベースに保存する
@@ -205,6 +278,9 @@ def save_to_notion(markdown: str, url: str) -> str:
 
     # タグを抽出
     tags = extract_tags_from_markdown(markdown)
+
+    # Markdownを Notionブロックに変換
+    notion_blocks = markdown_to_notion_blocks(markdown)
 
     try:
         # Notionページを作成
@@ -232,23 +308,7 @@ def save_to_notion(markdown: str, url: str) -> str:
                     "multi_select": [{"name": tag} for tag in tags]
                 }
             },
-            children=[
-                {
-                    "object": "block",
-                    "type": "code",
-                    "code": {
-                        "language": "markdown",
-                        "rich_text": [
-                            {
-                                "type": "text",
-                                "text": {
-                                    "content": markdown[:2000]  # Notionの制限により最初の2000文字
-                                }
-                            }
-                        ]
-                    }
-                }
-            ]
+            children=notion_blocks
         )
 
         # NotionページのURLを返す
