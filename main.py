@@ -86,25 +86,28 @@ def extract_tags_from_markdown(markdown: str) -> list[str]:
     """
     lines = markdown.split('\n')
     in_tags_section = False
+    all_tags = []
 
     for line in lines:
-        # タグセクションを探す
-        if line.strip().startswith('## タグ'):
+        stripped_line = line.strip()
+
+        # タグセクションを探す（日本語と英語の両方に対応）
+        if stripped_line.startswith('## タグ') or stripped_line.startswith('## Tags'):
             in_tags_section = True
             continue
 
         # タグセクション内でタグを抽出
         if in_tags_section:
-            # 次のセクションに到達したら終了
-            if line.strip().startswith('#'):
+            # 次のセクション（##で始まる）に到達したら終了
+            if stripped_line.startswith('##'):
                 break
 
-            # #で始まるタグを抽出
-            tags = re.findall(r'#(\w+)', line)
+            # #で始まるタグを抽出（#の後に日本語・英語・数字が続くパターン）
+            tags = re.findall(r'#([a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF_\-]+)', stripped_line)
             if tags:
-                return tags
+                all_tags.extend(tags)
 
-    return []
+    return all_tags if all_tags else []
 
 
 def generate_article_markdown(url: str) -> str:
@@ -248,26 +251,43 @@ def markdown_to_notion_blocks(markdown: str) -> list:
     """
     blocks = []
     lines = markdown.split('\n')
+    skip_tags_section = False
 
     for line in lines:
-        line = line.strip()
+        stripped_line = line.strip()
 
-        if not line:
+        if not stripped_line:
             continue
 
-        # 見出し1
-        if line.startswith('# '):
-            content = line[2:]
-            blocks.append({
-                "object": "block",
-                "type": "heading_1",
-                "heading_1": {
-                    "rich_text": parse_markdown_text(content)
-                }
-            })
+        # タグセクションの開始を検出
+        if stripped_line.startswith('## タグ') or stripped_line.startswith('## Tags'):
+            skip_tags_section = True
+            continue
+
+        # タグセクション内の行をスキップ
+        if skip_tags_section:
+            # 次の見出しセクションに到達したらスキップ解除
+            if stripped_line.startswith('##'):
+                skip_tags_section = False
+            else:
+                # タグセクション内はスキップ
+                continue
+
+        # 見出し1（最初のタイトルは除外）
+        if stripped_line.startswith('# '):
+            content = stripped_line[2:]
+            # 既にブロックがある場合のみ追加（最初のタイトルは除外）
+            if blocks:
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_1",
+                    "heading_1": {
+                        "rich_text": parse_markdown_text(content)
+                    }
+                })
         # 見出し2
-        elif line.startswith('## '):
-            content = line[3:]
+        elif stripped_line.startswith('## '):
+            content = stripped_line[3:]
             blocks.append({
                 "object": "block",
                 "type": "heading_2",
@@ -276,8 +296,8 @@ def markdown_to_notion_blocks(markdown: str) -> list:
                 }
             })
         # 見出し3
-        elif line.startswith('### '):
-            content = line[4:]
+        elif stripped_line.startswith('### '):
+            content = stripped_line[4:]
             blocks.append({
                 "object": "block",
                 "type": "heading_3",
@@ -286,8 +306,8 @@ def markdown_to_notion_blocks(markdown: str) -> list:
                 }
             })
         # 箇条書き
-        elif line.startswith('- '):
-            content = line[2:]
+        elif stripped_line.startswith('- '):
+            content = stripped_line[2:]
             blocks.append({
                 "object": "block",
                 "type": "bulleted_list_item",
@@ -296,7 +316,7 @@ def markdown_to_notion_blocks(markdown: str) -> list:
                 }
             })
         # 区切り線
-        elif line.startswith('---'):
+        elif stripped_line.startswith('---'):
             blocks.append({
                 "object": "block",
                 "type": "divider",
@@ -305,13 +325,13 @@ def markdown_to_notion_blocks(markdown: str) -> list:
         # 通常のテキスト
         else:
             # 長すぎるテキストは分割
-            if len(line) > 2000:
-                line = line[:2000]
+            if len(stripped_line) > 2000:
+                stripped_line = stripped_line[:2000]
             blocks.append({
                 "object": "block",
                 "type": "paragraph",
                 "paragraph": {
-                    "rich_text": parse_markdown_text(line)
+                    "rich_text": parse_markdown_text(stripped_line)
                 }
             })
 
