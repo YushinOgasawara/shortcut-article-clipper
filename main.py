@@ -211,7 +211,7 @@ def save_to_notion(markdown: str, url: str) -> str:
         new_page = notion.pages.create(
             parent={"database_id": NOTION_DATABASE_ID},
             properties={
-                "タイトル": {
+                "Name": {
                     "title": [
                         {
                             "text": {
@@ -223,12 +223,12 @@ def save_to_notion(markdown: str, url: str) -> str:
                 "URL": {
                     "url": url
                 },
-                "保存日": {
+                "Date": {
                     "date": {
                         "start": datetime.now().strftime('%Y-%m-%d')
                     }
                 },
-                "タグ": {
+                "Tags": {
                     "multi_select": [{"name": tag} for tag in tags]
                 }
             },
