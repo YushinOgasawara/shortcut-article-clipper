@@ -160,10 +160,10 @@ URL: {url}
 """
 
     try:
-        # Gemini モデルの初期化
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        # Gemini モデルの初期化（Search grounding対応モデル）
+        model = genai.GenerativeModel('gemini-2.5-flash')
 
-        # 記事URLを含めたプロンプトでコンテンツを生成
+        # URLから記事を取得して分析
         response = model.generate_content(
             prompt,
             generation_config=genai.GenerationConfig(
