@@ -161,12 +161,11 @@ URL: {url}
 
     try:
         # Gemini モデルの初期化
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
-        # Google Search Groundingを有効化して記事を取得・分析
+        # 記事URLを含めたプロンプトでコンテンツを生成
         response = model.generate_content(
             prompt,
-            tools=[{"google_search_retrieval": {}}],
             generation_config=genai.GenerationConfig(
                 temperature=0.7,
                 max_output_tokens=4096,
