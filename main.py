@@ -190,6 +190,58 @@ URL: {url}
         )
 
 
+def parse_markdown_text(text: str) -> list:
+    """
+    Markdownテキストをrich_text配列に変換（太字、斜体、リンク対応）
+    """
+    rich_text = []
+    current_text = ""
+    i = 0
+
+    while i < len(text):
+        # 太字 **text**
+        if text[i:i+2] == '**':
+            if current_text:
+                rich_text.append({"type": "text", "text": {"content": current_text}})
+                current_text = ""
+
+            end = text.find('**', i + 2)
+            if end != -1:
+                bold_text = text[i+2:end]
+                rich_text.append({
+                    "type": "text",
+                    "text": {"content": bold_text},
+                    "annotations": {"bold": True}
+                })
+                i = end + 2
+                continue
+
+        # 斜体 *text* または _text_
+        elif text[i] in ['*', '_'] and (i == 0 or text[i-1] != '*'):
+            if current_text:
+                rich_text.append({"type": "text", "text": {"content": current_text}})
+                current_text = ""
+
+            end = text.find(text[i], i + 1)
+            if end != -1:
+                italic_text = text[i+1:end]
+                rich_text.append({
+                    "type": "text",
+                    "text": {"content": italic_text},
+                    "annotations": {"italic": True}
+                })
+                i = end + 1
+                continue
+
+        current_text += text[i]
+        i += 1
+
+    if current_text:
+        rich_text.append({"type": "text", "text": {"content": current_text}})
+
+    return rich_text if rich_text else [{"type": "text", "text": {"content": text}}]
+
+
 def markdown_to_notion_blocks(markdown: str) -> list:
     """
     MarkdownをNotionブロックに変換する
@@ -205,38 +257,42 @@ def markdown_to_notion_blocks(markdown: str) -> list:
 
         # 見出し1
         if line.startswith('# '):
+            content = line[2:]
             blocks.append({
                 "object": "block",
                 "type": "heading_1",
                 "heading_1": {
-                    "rich_text": [{"type": "text", "text": {"content": line[2:]}}]
+                    "rich_text": parse_markdown_text(content)
                 }
             })
         # 見出し2
         elif line.startswith('## '):
+            content = line[3:]
             blocks.append({
                 "object": "block",
                 "type": "heading_2",
                 "heading_2": {
-                    "rich_text": [{"type": "text", "text": {"content": line[3:]}}]
+                    "rich_text": parse_markdown_text(content)
                 }
             })
         # 見出し3
         elif line.startswith('### '):
+            content = line[4:]
             blocks.append({
                 "object": "block",
                 "type": "heading_3",
                 "heading_3": {
-                    "rich_text": [{"type": "text", "text": {"content": line[4:]}}]
+                    "rich_text": parse_markdown_text(content)
                 }
             })
         # 箇条書き
         elif line.startswith('- '):
+            content = line[2:]
             blocks.append({
                 "object": "block",
                 "type": "bulleted_list_item",
                 "bulleted_list_item": {
-                    "rich_text": [{"type": "text", "text": {"content": line[2:]}}]
+                    "rich_text": parse_markdown_text(content)
                 }
             })
         # 区切り線
@@ -255,7 +311,7 @@ def markdown_to_notion_blocks(markdown: str) -> list:
                 "object": "block",
                 "type": "paragraph",
                 "paragraph": {
-                    "rich_text": [{"type": "text", "text": {"content": line}}]
+                    "rich_text": parse_markdown_text(line)
                 }
             })
 
