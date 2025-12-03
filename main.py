@@ -4,7 +4,8 @@ import re
 from datetime import datetime
 from typing import Optional
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, HttpUrl
 from dotenv import load_dotenv
@@ -26,9 +27,11 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID")
 
-# Gemini APIの初期化
+# Gemini クライアントの初期化
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+else:
+    gemini_client = None
 
 # Notion クライアントの初期化
 if NOTION_API_KEY:
@@ -193,33 +196,38 @@ URL: {url}
 """
 
     try:
-        # Google Search ツールの設定（辞書形式で指定）
-        google_search_tool = {
-            "google_search": {}
-        }
+        if not gemini_client:
+            raise HTTPException(
+                status_code=500,
+                detail="Gemini クライアントが初期化されていません"
+            )
 
-        # Gemini モデルの初期化（Google Search Grounding有効化）
-        model = genai.GenerativeModel(
-            'gemini-2.5-flash',
-            tools=[google_search_tool]
+        # Google Search ツールの設定
+        google_search_tool = types.Tool(
+            google_search=types.GoogleSearch()
+        )
+
+        # 生成設定
+        config = types.GenerateContentConfig(
+            tools=[google_search_tool],
+            response_mime_type="application/json",
+            response_schema={
+                "type": "OBJECT",
+                "properties": {
+                    "markdown": {
+                        "type": "STRING",
+                        "description": "記事を分析したMarkdown形式のテキスト"
+                    }
+                },
+                "required": ["markdown"]
+            }
         )
 
         # Google Search Groundingを使用してURLから記事を取得
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json",
-                response_schema={
-                    "type": "object",
-                    "properties": {
-                        "markdown": {
-                            "type": "string",
-                            "description": "記事を分析したMarkdown形式のテキスト"
-                        }
-                    },
-                    "required": ["markdown"]
-                }
-            )
+        response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=config
         )
 
         # JSON形式のレスポンスをパース
