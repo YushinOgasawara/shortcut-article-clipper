@@ -158,6 +158,12 @@ def generate_article_markdown(url: str) -> str:
 
 URL: {url}
 
+# 重要な指示
+
+- **出力はMarkdownのみです。余計な説明文や前置きは一切不要です。**
+- **「はい、わかりました」「以下は記事の内容です」などの応答文は絶対に含めないでください。**
+- **最初の文字は必ず「#」（見出し）から始めてください。**
+
 # 出力形式
 
 以下の構造でMarkdownを作成してください：
@@ -188,11 +194,12 @@ URL: {url}
 
 ---
 
-注意事項：
+出力要件：
 - 記事の内容を正確に反映してください
 - 読みやすく構造化してください
 - 検索しやすいキーワードを含めてください
 - 日本語で出力してください
+- Markdown形式のみを出力し、説明文や前置きは含めないでください
 """
 
     try:
@@ -209,18 +216,7 @@ URL: {url}
 
         # 生成設定
         config = types.GenerateContentConfig(
-            tools=[google_search_tool],
-            response_mime_type="application/json",
-            response_schema={
-                "type": "OBJECT",
-                "properties": {
-                    "markdown": {
-                        "type": "STRING",
-                        "description": "記事を分析したMarkdown形式のテキスト"
-                    }
-                },
-                "required": ["markdown"]
-            }
+            tools=[google_search_tool]
         )
 
         # Google Search Groundingを使用してURLから記事を取得
@@ -230,9 +226,14 @@ URL: {url}
             config=config
         )
 
-        # JSON形式のレスポンスをパース
-        result = json.loads(response.text)
-        markdown = result.get("markdown", "")
+        # テキストレスポンスを取得
+        markdown = response.text.strip()
+
+        # 余計な前置き文を削除（念のため）
+        # 最初の # が見つかるまでの部分を削除
+        first_hash = markdown.find('#')
+        if first_hash > 0:
+            markdown = markdown[first_hash:]
 
         # 記事が正しく取得できたかチェック
         if not markdown or len(markdown) < 100 or "取得できません" in markdown:
