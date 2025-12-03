@@ -193,13 +193,20 @@ URL: {url}
 """
 
     try:
+        # Google Search ツールの設定
+        google_search_tool = genai.protos.Tool(
+            google_search=genai.protos.GoogleSearch()
+        )
+
         # Gemini モデルの初期化（Google Search Grounding有効化）
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel(
+            'gemini-2.5-flash',
+            tools=[google_search_tool]
+        )
 
         # Google Search Groundingを使用してURLから記事を取得
         response = model.generate_content(
             prompt,
-            tools='google_search_retrieval',
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
                 response_schema={
