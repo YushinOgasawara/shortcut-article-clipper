@@ -193,9 +193,13 @@ URL: {url}
 """
 
     try:
-        # Gemini モデルの初期化（構造化出力対応）
-        model = genai.GenerativeModel(
-            'gemini-2.5-flash',
+        # Gemini モデルの初期化（Google Search Grounding有効化）
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        # Google Search Groundingを使用してURLから記事を取得
+        response = model.generate_content(
+            prompt,
+            tools='google_search_retrieval',
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
                 response_schema={
@@ -209,12 +213,6 @@ URL: {url}
                     "required": ["markdown"]
                 }
             )
-        )
-
-        # Google Search Groundingを使用してURLから記事を取得
-        response = model.generate_content(
-            prompt,
-            tools='google_search_retrieval'
         )
 
         # JSON形式のレスポンスをパース
