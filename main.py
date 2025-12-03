@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from datetime import datetime
@@ -192,19 +193,30 @@ URL: {url}
 """
 
     try:
-        # Gemini モデルの初期化（Search grounding対応モデル）
-        model = genai.GenerativeModel('gemini-2.5-flash')
-
-        # URLから記事を取得して分析
-        response = model.generate_content(
-            prompt,
+        # Gemini モデルの初期化（構造化出力対応）
+        model = genai.GenerativeModel(
+            'gemini-2.5-flash',
             generation_config=genai.GenerationConfig(
-                temperature=0.7,
-                max_output_tokens=4096,
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "markdown": {
+                            "type": "string",
+                            "description": "記事を分析したMarkdown形式のテキスト"
+                        }
+                    },
+                    "required": ["markdown"]
+                }
             )
         )
 
-        markdown = response.text
+        # URLから記事を取得して分析
+        response = model.generate_content(prompt)
+
+        # JSON形式のレスポンスをパース
+        result = json.loads(response.text)
+        markdown = result.get("markdown", "")
 
         # 記事が正しく取得できたかチェック
         if not markdown or len(markdown) < 100 or "取得できません" in markdown:
@@ -215,6 +227,11 @@ URL: {url}
 
         return markdown
 
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gemini APIのレスポンス解析に失敗しました: {str(e)}"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=500,
