@@ -110,6 +110,35 @@ def extract_tags_from_markdown(markdown: str) -> list[str]:
     return all_tags if all_tags else []
 
 
+def extract_published_date_from_markdown(markdown: str) -> Optional[str]:
+    """
+    Markdownから公開日を抽出する
+    """
+    lines = markdown.split('\n')
+
+    for line in lines:
+        stripped_line = line.strip()
+
+        # **公開日**: の形式を探す
+        if '**公開日**:' in stripped_line or '**公開日**：' in stripped_line:
+            # コロンの後の日付部分を抽出
+            date_text = re.sub(r'.*\*\*公開日\*\*[:：]\s*', '', stripped_line)
+            date_text = date_text.strip()
+
+            # 日付形式を検出（YYYY-MM-DD, YYYY/MM/DD, YYYY年MM月DD日など）
+            # YYYY-MM-DD形式
+            match = re.search(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', date_text)
+            if match:
+                date_str = match.group(1)
+                # 年月日を-に統一
+                date_str = re.sub(r'[年月]', '-', date_str)
+                date_str = re.sub(r'日', '', date_str)
+                date_str = re.sub(r'/', '-', date_str)
+                return date_str
+
+    return None
+
+
 def generate_article_markdown(url: str) -> str:
     """
     Gemini APIを使用して記事を取得・分析し、Markdownを生成する
@@ -355,35 +384,49 @@ def save_to_notion(markdown: str, url: str) -> str:
     # タグを抽出
     tags = extract_tags_from_markdown(markdown)
 
+    # 公開日を抽出
+    published_date = extract_published_date_from_markdown(markdown)
+
     # Markdownを Notionブロックに変換
     notion_blocks = markdown_to_notion_blocks(markdown)
+
+    # Notionプロパティを構築
+    properties = {
+        "Name": {
+            "title": [
+                {
+                    "text": {
+                        "content": title
+                    }
+                }
+            ]
+        },
+        "URL": {
+            "url": url
+        },
+        "Date": {
+            "date": {
+                "start": datetime.now().strftime('%Y-%m-%d')
+            }
+        },
+        "Tags": {
+            "multi_select": [{"name": tag} for tag in tags]
+        }
+    }
+
+    # 公開日が抽出できた場合は追加
+    if published_date:
+        properties["Published"] = {
+            "date": {
+                "start": published_date
+            }
+        }
 
     try:
         # Notionページを作成
         new_page = notion.pages.create(
             parent={"database_id": NOTION_DATABASE_ID},
-            properties={
-                "Name": {
-                    "title": [
-                        {
-                            "text": {
-                                "content": title
-                            }
-                        }
-                    ]
-                },
-                "URL": {
-                    "url": url
-                },
-                "Date": {
-                    "date": {
-                        "start": datetime.now().strftime('%Y-%m-%d')
-                    }
-                },
-                "Tags": {
-                    "multi_select": [{"name": tag} for tag in tags]
-                }
-            },
+            properties=properties,
             children=notion_blocks
         )
 
