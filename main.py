@@ -193,10 +193,10 @@ URL: {url}
 """
 
     try:
-        # Google Search ツールの設定
-        google_search_tool = genai.protos.Tool(
-            google_search=genai.protos.GoogleSearch()
-        )
+        # Google Search ツールの設定（辞書形式で指定）
+        google_search_tool = {
+            "google_search": {}
+        }
 
         # Gemini モデルの初期化（Google Search Grounding有効化）
         model = genai.GenerativeModel(
