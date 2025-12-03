@@ -211,8 +211,13 @@ URL: {url}
             )
         )
 
-        # URLから記事を取得して分析
-        response = model.generate_content(prompt)
+        # Google Search Groundingを使用してURLから記事を取得
+        response = model.generate_content(
+            prompt,
+            tools=[genai.protos.Tool(
+                google_search_retrieval=genai.protos.GoogleSearchRetrieval()
+            )]
+        )
 
         # JSON形式のレスポンスをパース
         result = json.loads(response.text)
