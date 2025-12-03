@@ -280,7 +280,7 @@ def markdown_to_notion_blocks(markdown: str) -> list:
     """
     blocks = []
     lines = markdown.split('\n')
-    skip_tags_section = False
+    skip_section = False
 
     for line in lines:
         stripped_line = line.strip()
@@ -288,18 +288,21 @@ def markdown_to_notion_blocks(markdown: str) -> list:
         if not stripped_line:
             continue
 
-        # タグセクションの開始を検出
-        if stripped_line.startswith('## タグ') or stripped_line.startswith('## Tags'):
-            skip_tags_section = True
+        # スキップするセクションの開始を検出
+        if (stripped_line.startswith('## タグ') or
+            stripped_line.startswith('## Tags') or
+            stripped_line.startswith('## メタ情報') or
+            stripped_line.startswith('## Meta Information')):
+            skip_section = True
             continue
 
-        # タグセクション内の行をスキップ
-        if skip_tags_section:
+        # スキップセクション内の行をスキップ
+        if skip_section:
             # 次の見出しセクションに到達したらスキップ解除
             if stripped_line.startswith('##'):
-                skip_tags_section = False
+                skip_section = False
             else:
-                # タグセクション内はスキップ
+                # スキップセクション内はスキップ
                 continue
 
         # 見出し1（最初のタイトルは除外）
