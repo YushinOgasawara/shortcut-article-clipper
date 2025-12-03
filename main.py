@@ -214,7 +214,7 @@ URL: {url}
         # Google Search Groundingを使用してURLから記事を取得
         response = model.generate_content(
             prompt,
-            tools=['google_search']
+            tools='google_search_retrieval'
         )
 
         # JSON形式のレスポンスをパース
