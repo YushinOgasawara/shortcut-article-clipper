@@ -214,20 +214,16 @@ def generate_article_markdown(url: str) -> str:
                 detail="Gemini クライアントが初期化されていません"
             )
 
-        # Google Search ツールの設定（Dynamic retrieval threshold有効化）
+        # Google Search ツールの設定
         google_search_tool = types.Tool(
-            google_search=types.GoogleSearch(
-                dynamic_retrieval_config=types.DynamicRetrievalConfig(
-                    mode="MODE_DYNAMIC",
-                    dynamic_threshold=0.3  # 低い値 = より積極的に検索を使用
-                )
-            )
+            google_search=types.GoogleSearch()
         )
 
         # 生成設定
         config = types.GenerateContentConfig(
             tools=[google_search_tool],
             temperature=0.1,  # 温度を下げて出力を安定化・ハルシネーション抑制
+            top_p=0.8,  # 上位80%の確率分布のみを使用してランダム性を抑制
         )
 
         # Google Search Groundingを使用してURLから記事を取得
