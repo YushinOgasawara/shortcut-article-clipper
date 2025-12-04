@@ -106,10 +106,22 @@ def extract_tags_from_markdown(markdown: str) -> list[str]:
             if stripped_line.startswith('##'):
                 break
 
+            # 空行はスキップ
+            if not stripped_line:
+                continue
+
             # #で始まるタグを抽出（#の後に日本語・英語・数字が続くパターン）
-            tags = re.findall(r'#([a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF_\-]+)', stripped_line)
-            if tags:
-                all_tags.extend(tags)
+            hash_tags = re.findall(r'#([a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF_\-]+)', stripped_line)
+            if hash_tags:
+                all_tags.extend(hash_tags)
+
+            # #タグを除去した残りの部分からカンマ区切りタグを抽出
+            # #タグを削除
+            remaining = re.sub(r'#[a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF_\-]+', '', stripped_line)
+            # カンマ区切りタグを抽出
+            comma_tags = [tag.strip() for tag in remaining.split(',') if tag.strip()]
+            if comma_tags:
+                all_tags.extend(comma_tags)
 
     return all_tags if all_tags else []
 
